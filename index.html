@@ -389,7 +389,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 let myName='',myMode='sender',peer=null,conn=null,myPeerId='';
 let grabFrames=0,palmFrames=0;
-const GRAB_T=12,PALM_T=10;
+const GRAB_T=6,PALM_T=6;
 let screenshotQueue=[],receivedItems=[];
 let loopGen=0;
 let facingMode='user';       // 'user' = front, 'environment' = back
@@ -443,7 +443,11 @@ function initPeer(){
   if(peer){try{peer.destroy();}catch(e){}peer=null;}
   diag('Creating Peer (mode='+myMode+')','#00c8ff');
   const shortId=myMode==='sender'?'PX'+Math.random().toString(36).substr(2,4).toUpperCase():undefined;
-  peer=new Peer(shortId,{host:'0.peerjs.com',port:443,secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'}]}});
+  peer = new Peer(shortId, {
+  host: 'peerjs-server.herokuapp.com',
+  secure: true,
+  port: 443
+});
   peer.on('open',id=>{
     myPeerId=id;
     diag('Peer open — ID: '+id,'#00ff88');
@@ -637,7 +641,10 @@ function captureAndSend(){
       ctx.translate(canvas.width,0);
       ctx.scale(-1,1);
     }
-    ctx.drawImage(vid,0,0,canvas.width,canvas.height);
+    if (!vid.videoWidth || !vid.videoHeight) {
+  diag('Video not ready for capture', '#ffb800');
+  return;
+}
     const b64=canvas.toDataURL('image/jpeg',0.5).split(',')[1];
 
     if(!b64||b64.length<100){
@@ -646,7 +653,7 @@ function captureAndSend(){
       return;
     }
 
-    const CHUNK=48000;
+    const CHUNK=16000;
     const ts=Date.now();
     const total=Math.ceil(b64.length/CHUNK);
     for(let i=0;i<total;i++){
@@ -791,6 +798,9 @@ function updateDebug(msg, color) {
 const mpHands = new Hands({
   locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
 });
+if (typeof Hands === 'undefined') {
+  diag('MediaPipe not loaded', '#ff3c5a');
+}
 
 mpHands.setOptions({
   maxNumHands: 1,
@@ -902,7 +912,9 @@ async function startCamera() {
   try{
     diag('getUserMedia: '+facingMode,'#00c8ff');
     stream=await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ideal:facingMode}, width:{ideal:640}, height:{ideal:480} },
+      video: {
+  facingMode: facingMode === 'user' ? 'user' : { exact: 'environment' }
+}
       audio:false
     });
     diag('Stream OK','#00ff88');
