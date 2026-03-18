@@ -144,6 +144,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </div>
 <div id="flash"></div>
 <div id="sendAnim"><div class="send-ring">📤</div><div class="send-label">SCREENSHOT SENT</div></div>
+
+<!-- ON-SCREEN DIAGNOSTICS — shows without needing browser console -->
+<div id="diagPanel" style="display:none;position:fixed;bottom:80px;left:0;right:0;z-index:400;
+  background:rgba(3,5,8,0.96);border-top:1px solid var(--border);padding:10px 14px;
+  font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1px;
+  max-height:35vh;overflow-y:auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+    <span style="color:var(--cyan);font-weight:bold;">DIAGNOSTICS</span>
+    <button onclick="document.getElementById('diagPanel').style.display='none'"
+      style="background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;">✕</button>
+  </div>
+  <div id="diagLog" style="display:flex;flex-direction:column;gap:3px;"></div>
+</div>
+<!-- Tap the debug label 3 times to open diagnostics -->
+
 <div id="notifToast">
   <div class="notif-inner">
     <img id="notifThumb" class="notif-thumb" src="" alt=""/>
@@ -337,7 +352,39 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 </div>
 
 <script>
-// Starfield
+// ── ON-SCREEN DIAGNOSTICS ─────────────────────────────────────────────────────
+let diagTapCount = 0, diagTapTimer = null;
+let diagLines = [];
+
+function diag(msg, color){
+  const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const line = '['+time+'] '+msg;
+  diagLines.push({ line, color:color||'#c5dff0' });
+  if(diagLines.length > 40) diagLines.shift();
+  const log = document.getElementById('diagLog');
+  if(log){
+    log.innerHTML = diagLines.map(l=>
+      `<div style="color:${l.color};padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.05)">${l.line}</div>`
+    ).reverse().join('');
+  }
+}
+
+// Triple-tap the debug label to open diagnostics
+document.addEventListener('DOMContentLoaded', ()=>{
+  const dbgEl = document.getElementById('gestureDebug');
+  if(dbgEl){
+    dbgEl.addEventListener('click', ()=>{
+      diagTapCount++;
+      clearTimeout(diagTapTimer);
+      if(diagTapCount >= 3){
+        diagTapCount = 0;
+        document.getElementById('diagPanel').style.display = 'block';
+      } else {
+        diagTapTimer = setTimeout(()=>{ diagTapCount=0; }, 600);
+      }
+    });
+  }
+});
 (function(){const c=document.getElementById('stars');for(let i=0;i<80;i++){const s=document.createElement('div');s.className='star';const sz=Math.random()*2+0.5;s.style.cssText=`width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;animation-duration:${Math.random()*4+2}s;animation-delay:${Math.random()*4}s;`;c.appendChild(s);}})();
 
 let myName='',myMode='sender',peer=null,conn=null,myPeerId='';
@@ -389,32 +436,38 @@ function goToConnect(){
 function initPeer(){
   if(typeof Peer==='undefined'){
     updateConnectStatus('LOADING PEERJS...','amber');
+    diag('Peer.js not loaded yet, retrying...','#ffb800');
     setTimeout(initPeer,500);
     return;
   }
   if(peer){try{peer.destroy();}catch(e){}peer=null;}
+  diag('Creating Peer (mode='+myMode+')','#00c8ff');
   const shortId=myMode==='sender'?'PX'+Math.random().toString(36).substr(2,4).toUpperCase():undefined;
   peer=new Peer(shortId,{host:'0.peerjs.com',port:443,secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'}]}});
   peer.on('open',id=>{
     myPeerId=id;
+    diag('Peer open — ID: '+id,'#00ff88');
     if(myMode==='sender'){
       document.getElementById('myCode').textContent=id;
       updateConnectStatus('WAITING FOR RECEIVER...','amber');
     }
   });
-  // Sender: handle incoming connection from receiver
   peer.on('connection',c=>{
+    diag('Incoming connection from receiver','#00ff88');
     conn=c;
     conn.on('open',()=>{
+      diag('Connection open (sender side)','#00ff88');
       conn.send(JSON.stringify({type:'HELLO',name:myName}));
       setupConnData();
       goToGestureScreen();
     });
   });
   peer.on('error',e=>{
-    console.error('Peer error:',e.type,e);
+    diag('PEER ERROR: '+e.type,'#ff3c5a');
     updateConnectStatus('ERROR: '+e.type+' — RELOAD','red');
   });
+  peer.on('disconnected',()=>diag('Peer disconnected from PeerJS server','#ffb800'));
+  peer.on('close',()=>diag('Peer connection closed','#ff3c5a'));
 }
 
 function updateConnectStatus(text,color){
@@ -746,7 +799,15 @@ mpHands.setOptions({
   minTrackingConfidence: 0.6,
 });
 
+let _frameCount=0, _lastFrameLog=0;
 mpHands.onResults(results => {
+  // Log frame arrival every 60 frames so diag shows camera is alive
+  _frameCount++;
+  if(_frameCount - _lastFrameLog >= 60){
+    _lastFrameLog = _frameCount;
+    diag('Frames OK ('+_frameCount+') — hands: '+(results.multiHandLandmarks?results.multiHandLandmarks.length:0),'#3a5a6a');
+  }
+
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
     const lm = results.multiHandLandmarks[0];
     const g  = detectGesture(lm);
@@ -823,64 +884,57 @@ function processReceiver(g) {
 
 async function startCamera() {
   updateDebug('STARTING CAMERA...', 'var(--amber)');
-  grabFrames = 0;
-  palmFrames = 0;
-  countdownActive = false;
-  document.getElementById('countdownOverlay').style.display = 'none';
+  diag('startCamera() — facingMode='+facingMode, '#00c8ff');
+  grabFrames=0; palmFrames=0;
+  countdownActive=false;
+  document.getElementById('countdownOverlay').style.display='none';
 
-  // Stop existing MediaPipe camera wrapper
+  // Stop existing camera
   if(mpCamera){ try{ mpCamera.stop(); }catch(e){} mpCamera=null; }
+  const vid=document.getElementById('video');
+  if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
 
-  // Stop existing raw stream tracks
-  const vid = document.getElementById('video');
-  if(vid.srcObject){
-    vid.srcObject.getTracks().forEach(t=>t.stop());
-    vid.srcObject = null;
-  }
+  await new Promise(r=>setTimeout(r,350));
+  vid.style.transform = facingMode==='user' ? 'scaleX(-1)' : 'scaleX(1)';
 
-  // Small delay so OS fully releases camera hardware before re-acquiring
-  await new Promise(r=>setTimeout(r,300));
-
-  // Get camera stream directly — bypasses MediaPipe Camera wrapper
-  // which doesn't reliably pass facingMode on mobile
+  // Acquire stream with correct facingMode BEFORE handing to MediaPipe Camera
   let stream;
   try{
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode: { ideal: facingMode }, width:{ideal:640}, height:{ideal:480} },
-      audio: false
+    diag('getUserMedia: '+facingMode,'#00c8ff');
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:facingMode}, width:{ideal:640}, height:{ideal:480} },
+      audio:false
     });
+    diag('Stream OK','#00ff88');
   } catch(e){
-    // Fallback: try without facingMode constraint if device rejects it
+    diag('Constraint failed ('+e.message+'), trying plain video','#ffb800');
     try{
-      stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+      stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      diag('Fallback stream OK','#00ff88');
     } catch(e2){
-      updateDebug('CAM ERROR: '+e2.message, 'var(--red)');
+      diag('CAMERA FAILED: '+e2.message,'#ff3c5a');
+      updateDebug('CAM ERROR: '+e2.message,'var(--red)');
       return;
     }
   }
 
-  vid.srcObject = stream;
-  vid.style.transform = facingMode==='user' ? 'scaleX(-1)' : 'scaleX(1)';
+  // Attach stream so MediaPipe Camera wrapper reads from correct camera
+  vid.srcObject=stream;
+  await new Promise((res,rej)=>{ vid.oncanplay=res; vid.onerror=rej; vid.play().catch(rej); });
+  diag('Video playing','#00ff88');
 
-  // Wait for video to be playing
-  await new Promise((resolve, reject)=>{
-    vid.oncanplay = resolve;
-    vid.onerror   = reject;
-    vid.play().catch(reject);
+  const myGen=loopGen;
+  mpCamera=new Camera(vid,{
+    onFrame: async()=>{
+      if(loopGen!==myGen){ try{mpCamera.stop();}catch(e){} return; }
+      try{ await mpHands.send({image:vid}); } catch(e){ diag('mpHands.send error: '+e.message,'#ff3c5a'); }
+    },
+    width:640, height:480,
   });
 
-  updateDebug('READY — show your hand', 'var(--green)');
-
-  // Run detection loop manually — send each frame to MediaPipe
-  const myGen = ++loopGen;
-  const loop = async () => {
-    if(loopGen !== myGen) return; // stop if camera was restarted
-    if(vid.readyState >= 2){ // HAVE_CURRENT_DATA
-      try{ await mpHands.send({ image: vid }); } catch(e){}
-    }
-    requestAnimationFrame(loop);
-  };
-  requestAnimationFrame(loop);
+  mpCamera.start()
+    .then(()=>{ diag('MediaPipe Camera started','#00ff88'); updateDebug('READY — show your hand','var(--green)'); })
+    .catch(e=>{ diag('MediaPipe start error: '+e.message,'#ff3c5a'); updateDebug('CAM ERROR: '+e.message,'var(--red)'); });
 }
 </script>
 </body>
