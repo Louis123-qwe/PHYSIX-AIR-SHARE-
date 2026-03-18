@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>PHYSIX SHARE</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<!-- MediaPipe Hands — same setup that worked in eye-hand interface -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+  if (typeof Peer === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js';
+    s.onerror = function(){ document.getElementById('peerError').style.display='block'; };
+    document.head.appendChild(s);
+  }
+});
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap');
+:root{--bg:#030508;--surface:#080d14;--card:#0c1520;--border:rgba(0,200,255,0.15);--cyan:#00c8ff;--cyan2:#00fff7;--amber:#ffb800;--red:#ff3c5a;--green:#00ff88;--purple:#a855f7;--text:#c5dff0;--dim:#3a5a6a;--glow:rgba(0,200,255,0.12);}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;touch-action:none;user-select:none;}
+#stars{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle linear infinite;}
+@keyframes twinkle{0%,100%{opacity:0.1}50%{opacity:0.8}}
+.screen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;transition:opacity .4s,transform .4s;}
+.screen.hidden{opacity:0;pointer-events:none;transform:scale(0.96);}
+.logo{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:6px;color:var(--cyan);text-shadow:0 0 20px var(--cyan);margin-bottom:4px;}
+.logo-title{font-family:'Rajdhani',sans-serif;font-size:52px;font-weight:700;line-height:0.9;color:#fff;text-transform:uppercase;}
+.logo-title span{color:var(--cyan);}
+.logo-sub{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--dim);margin-top:6px;}
+.holo-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:360px;position:relative;overflow:hidden;}
+.holo-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,200,255,0.04) 0%,transparent 50%,rgba(0,255,247,0.03) 100%);pointer-events:none;}
+.btn{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:3px;text-transform:uppercase;border:none;border-radius:8px;padding:14px 28px;cursor:pointer;transition:all .2s;width:100%;}
+.btn-cyan{background:var(--cyan);color:#000;box-shadow:0 0 24px rgba(0,200,255,0.3);}
+.btn-cyan:active{transform:scale(0.96);}
+.btn-outline{background:transparent;color:var(--cyan);border:1.5px solid var(--cyan);}
+.btn-ghost{background:var(--surface);color:var(--text);border:1px solid var(--border);}
+.mode-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px;}
+.mode-card{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:18px 12px;text-align:center;cursor:pointer;transition:all .2s;}
+.mode-card.selected{border-color:var(--cyan);background:rgba(0,200,255,0.08);box-shadow:0 0 20px rgba(0,200,255,0.12);}
+.mode-card .mico{font-size:32px;margin-bottom:8px;}
+.mode-card .mname{font-size:15px;font-weight:700;letter-spacing:2px;color:#fff;}
+.mode-card .mdesc{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--dim);margin-top:4px;}
+.code-box{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;margin:16px 0;}
+.code-label{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:4px;color:var(--dim);margin-bottom:8px;}
+.code-value{font-family:'Share Tech Mono',monospace;font-size:36px;font-weight:700;letter-spacing:8px;color:var(--cyan);text-shadow:0 0 20px var(--cyan);}
+.code-input{font-family:'Share Tech Mono',monospace;font-size:28px;letter-spacing:6px;color:var(--cyan);background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;text-align:center;width:100%;text-transform:uppercase;outline:none;margin:12px 0;}
+.code-input:focus{border-color:var(--cyan);box-shadow:0 0 16px rgba(0,200,255,0.15);}
+.status-pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:5px 12px;margin:8px 0;}
+.status-pill .dot{width:7px;height:7px;border-radius:50%;}
+.dot-green{background:var(--green);box-shadow:0 0 8px var(--green);}
+.dot-amber{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:blink 1s infinite;}
+.dot-red{background:var(--red);box-shadow:0 0 8px var(--red);}
+.dot-dim{background:var(--dim);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.pill-text{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text);}
+#gestureScreen{background:var(--bg);}
+#videoWrap{position:relative;width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#000;}
+#video{width:100%;display:block;transform:scaleX(-1);opacity:0.75;}
+#gestureOverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:12px;pointer-events:none;}
+.gesture-bar{display:flex;gap:8px;}
+.g-chip{background:rgba(8,13,20,0.85);border:1px solid var(--border);border-radius:100px;padding:5px 12px;display:flex;align-items:center;gap:5px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1px;transition:border-color .2s,box-shadow .2s;}
+.g-chip.active{border-color:var(--cyan);box-shadow:0 0 12px rgba(0,200,255,0.3);color:var(--cyan);}
+.g-chip .gico{font-size:14px;}
+#grabRing{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80px;height:80px;pointer-events:none;}
+#gestureHUD{width:100%;max-width:360px;display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+.hud-row{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;}
+.hud-left{display:flex;align-items:center;gap:10px;}
+.hud-ico{font-size:20px;}
+.hud-label{font-size:13px;font-weight:600;color:#fff;letter-spacing:1px;}
+.hud-sub{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--dim);}
+.hud-right{font-family:'Share Tech Mono',monospace;font-size:10px;}
+.queue-badge{background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:2px 7px;border-radius:100px;font-family:'Share Tech Mono',monospace;}
+#notifToast{position:fixed;top:0;left:0;right:0;z-index:200;transform:translateY(-100%);transition:transform .4s cubic-bezier(.16,1,.3,1);}
+#notifToast.show{transform:translateY(0);}
+.notif-inner{background:var(--card);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;gap:14px;align-items:center;}
+.notif-thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;}
+.notif-body{flex:1;min-width:0;}
+.notif-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:2px;}
+.notif-meta{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);}
+.notif-close{font-size:20px;color:var(--dim);cursor:pointer;padding:4px;flex-shrink:0;}
+#gallery{display:flex;flex-direction:column;gap:8px;width:100%;max-width:360px;max-height:200px;overflow-y:auto;margin-top:8px;}
+.gallery-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;gap:10px;align-items:center;}
+.gallery-thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0;}
+.gallery-info{flex:1;min-width:0;}
+.gallery-from{font-size:12px;font-weight:600;color:#fff;}
+.gallery-time{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--dim);}
+.gallery-dl{font-size:18px;cursor:pointer;color:var(--cyan);padding:4px;}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:300;}
+#sendAnim{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:250;pointer-events:none;opacity:0;transition:opacity .3s;}
+#sendAnim.show{opacity:1;}
+.send-ring{width:120px;height:120px;border-radius:50%;border:2px solid var(--cyan);box-shadow:0 0 40px var(--cyan);display:flex;align-items:center;justify-content:center;font-size:48px;animation:sendPulse .6s ease-out;}
+@keyframes sendPulse{0%{transform:scale(0.5);opacity:0}60%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+.send-label{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:4px;color:var(--cyan);margin-top:16px;text-shadow:0 0 20px var(--cyan);}
+#mockupScreen{overflow-y:auto;justify-content:flex-start;padding:60px 20px 100px;}
+.mockup-header{width:100%;max-width:400px;margin-bottom:24px;text-align:center;}
+.mockup-header h2{font-size:28px;font-weight:700;color:#fff;letter-spacing:2px;}
+.mockup-header p{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);margin-top:4px;letter-spacing:2px;}
+.mockup-row{display:flex;flex-direction:column;gap:20px;width:100%;max-width:400px;}
+.mockup-step{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+.mockup-step-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.step-num{width:24px;height:24px;border-radius:50%;background:var(--cyan);color:#000;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.step-title{font-size:14px;font-weight:700;color:#fff;letter-spacing:1px;}
+.step-sub{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--dim);}
+.mockup-phones{display:flex;gap:12px;padding:16px;justify-content:center;align-items:center;}
+.mockup-phone{width:120px;flex-shrink:0;}
+.phone-frame{background:#0a0f1a;border:2px solid rgba(0,200,255,0.25);border-radius:18px;padding:8px;}
+.phone-notch{width:30px;height:5px;background:#111;border-radius:3px;margin:0 auto 6px;}
+.phone-screen{background:var(--bg);border-radius:10px;overflow:hidden;min-height:100px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.phone-label{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--cyan);text-align:center;margin-top:5px;}
+.phone-bottom{width:30px;height:3px;background:rgba(0,200,255,0.2);border-radius:2px;margin:6px auto 0;}
+.mini-logo{font-size:8px;font-weight:700;color:var(--cyan);letter-spacing:2px;}
+.mini-code{font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);letter-spacing:3px;background:rgba(0,200,255,0.08);padding:4px 8px;border-radius:4px;}
+.mini-input{font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);border:1px solid var(--border);border-radius:4px;padding:3px 6px;width:100%;text-align:center;}
+.mini-status{font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--green);display:flex;align-items:center;gap:3px;}
+.mini-dot{width:5px;height:5px;border-radius:50%;background:var(--green);}
+.mini-notif{background:rgba(0,200,255,0.08);border:1px solid var(--border);border-radius:6px;padding:5px;width:100%;}
+.mini-notif-title{font-size:7px;font-weight:700;color:#fff;}
+.mini-notif-meta{font-family:'Share Tech Mono',monospace;font-size:6px;color:var(--dim);}
+.mini-thumb{width:100%;height:28px;background:linear-gradient(135deg,#1a2a3a,#0a1520);border-radius:4px;margin-top:3px;display:flex;align-items:center;justify-content:center;font-size:10px;}
+.mini-queue{background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.3);border-radius:4px;padding:3px 6px;font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--amber);}
+.arrow-between{font-size:22px;color:var(--cyan);text-shadow:0 0 10px var(--cyan);}
+.mockup-caption{padding:10px 16px 14px;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--dim);letter-spacing:1px;line-height:1.8;}
+#navTabs{position:fixed;bottom:0;left:0;right:0;z-index:50;display:none;background:rgba(8,13,20,0.95);backdrop-filter:blur(20px);border-top:1px solid var(--border);padding:8px 20px 12px;flex-direction:row;gap:8px;}
+#navTabs.visible{display:flex;}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px;border-radius:8px;cursor:pointer;border:none;background:transparent;transition:background .2s;}
+.nav-tab.active{background:rgba(0,200,255,0.1);}
+.nav-tab .tab-ico{font-size:20px;}
+.nav-tab .tab-label{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:1px;color:var(--dim);}
+.nav-tab.active .tab-label{color:var(--cyan);}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<!-- CDN error banner -->
+<div id="peerError" style="display:none;position:fixed;top:0;left:0;right:0;z-index:999;background:var(--red);color:#fff;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:10px;text-align:center;">
+  ⚠ NETWORK ERROR — Check your connection and reload
+</div>
+<div id="flash"></div>
+<div id="sendAnim"><div class="send-ring">📤</div><div class="send-label">SCREENSHOT SENT</div></div>
+<div id="notifToast">
+  <div class="notif-inner">
+    <img id="notifThumb" class="notif-thumb" src="" alt=""/>
+    <div class="notif-body">
+      <div class="notif-title" id="notifTitle">Screenshot received</div>
+      <div class="notif-meta" id="notifMeta">—</div>
+    </div>
+    <div class="notif-close" id="notifClose">✕</div>
+  </div>
+</div>
+
+<!-- SCREEN 1: WELCOME -->
+<div class="screen" id="welcomeScreen">
+  <div style="text-align:center;margin-bottom:28px;">
+    <div class="logo">// PHYSIX OS</div>
+    <div class="logo-title">AIR<br/><span>SHARE</span></div>
+    <div class="logo-sub">GESTURE SCREENSHOT TRANSFER</div>
+  </div>
+  <div class="holo-card" style="max-width:320px;">
+    <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:3px;color:var(--dim);margin-bottom:10px;">YOUR NAME</div>
+    <input id="nameInput" type="text" placeholder="e.g. Alex"
+      style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:12px 16px;color:#fff;font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:2px;outline:none;margin-bottom:16px;"/>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:3px;color:var(--dim);margin-bottom:10px;">SELECT MODE</div>
+    <div class="mode-row">
+      <div class="mode-card selected" id="cardSender" onclick="selectMode('sender')">
+        <div class="mico">✊</div><div class="mname">SENDER</div><div class="mdesc">GRAB TO SEND</div>
+      </div>
+      <div class="mode-card" id="cardReceiver" onclick="selectMode('receiver')">
+        <div class="mico">🤚</div><div class="mname">RECEIVER</div><div class="mdesc">PALM TO RECEIVE</div>
+      </div>
+    </div>
+    <button class="btn btn-cyan" style="margin-top:20px;" onclick="goToConnect()">CONTINUE →</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="showScreen('mockupScreen')">SEE HOW IT WORKS</button>
+  </div>
+</div>
+
+<!-- SCREEN 2: CONNECT -->
+<div class="screen hidden" id="connectScreen">
+  <div style="text-align:center;margin-bottom:24px;">
+    <div class="logo">// CONNECT</div>
+    <div class="logo-title" style="font-size:38px;" id="connectTitle">SENDER</div>
+  </div>
+  <div class="holo-card">
+    <div id="senderConnect">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--dim);margin-bottom:6px;">SHARE THIS CODE WITH RECEIVER</div>
+      <div class="code-box">
+        <div class="code-label">YOUR CODE</div>
+        <div class="code-value" id="myCode">----</div>
+      </div>
+      <div style="display:flex;justify-content:center;">
+        <div class="status-pill" id="connectStatus">
+          <div class="dot dot-amber"></div>
+          <div class="pill-text">WAITING FOR RECEIVER…</div>
+        </div>
+      </div>
+    </div>
+    <div id="receiverConnect" style="display:none;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--dim);margin-bottom:6px;">ENTER SENDER CODE</div>
+      <input id="codeInput" class="code-input" maxlength="8" placeholder="XXXX" oninput="this.value=this.value.toUpperCase()"/>
+      <button class="btn btn-cyan" onclick="connectToPeer()">CONNECT →</button>
+      <div style="display:flex;justify-content:center;margin-top:10px;">
+        <div class="status-pill" id="receiverStatus">
+          <div class="dot dot-dim"></div>
+          <div class="pill-text">ENTER CODE TO CONNECT</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:14px;" onclick="showScreen('welcomeScreen')">← BACK</button>
+  </div>
+</div>
+
+<!-- SCREEN 3: GESTURE ACTIVE -->
+<div class="screen hidden" id="gestureScreen" style="justify-content:flex-start;padding-top:52px;gap:10px;overflow-y:auto;padding-bottom:80px;">
+
+  <!-- Top bar: mode badge + controls -->
+  <div style="width:100%;max-width:360px;display:flex;align-items:center;justify-content:space-between;">
+    <div class="logo" id="activeModeBadge">// SENDER MODE</div>
+    <div style="display:flex;gap:8px;">
+      <!-- Camera flip -->
+      <button id="btnFlipCam" onclick="flipCamera()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:16px;" title="Flip camera">🔄</button>
+      <!-- Role switch -->
+      <button id="btnSwitchRole" onclick="switchRole()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--cyan);" title="Switch role">SWITCH ROLE</button>
+    </div>
+  </div>
+
+  <div id="videoWrap" style="max-width:360px;">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="debugCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1);"></canvas>
+    <!-- Countdown overlay inside video -->
+    <div id="countdownOverlay" style="position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(3,5,8,0.82);border-radius:12px;">
+      <div id="countdownNumber" style="font-family:'Rajdhani',sans-serif;font-size:110px;font-weight:700;color:var(--cyan);text-shadow:0 0 40px var(--cyan);line-height:1;">5</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--text);margin-top:8px;">GET READY...</div>
+    </div>
+    <div id="gestureOverlay">
+      <svg id="grabRing" viewBox="0 0 80 80" style="opacity:0;transition:opacity .2s;">
+        <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(0,200,255,0.15)" stroke-width="3"/>
+        <circle id="grabArc" cx="40" cy="40" r="36" fill="none" stroke="var(--cyan)" stroke-width="3" stroke-linecap="round" stroke-dasharray="226" stroke-dashoffset="226" transform="rotate(-90 40 40)" style="transition:stroke-dashoffset .1s;filter:drop-shadow(0 0 6px var(--cyan))"/>
+      </svg>
+      <div id="gestureDebug" style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--dim);background:rgba(3,5,8,0.82);padding:4px 12px;border-radius:6px;margin-bottom:4px;">LOADING MODEL…</div>
+      <div class="gesture-bar">
+        <div class="g-chip" id="chipGrab"><span class="gico">✊</span>GRAB</div>
+        <div class="g-chip" id="chipPalm"><span class="gico">🤚</span>PALM</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gestureHUD">
+    <div id="senderHUD">
+      <div class="hud-row">
+        <div class="hud-left"><div class="hud-ico">✊</div><div><div class="hud-label">GRAB FIST</div><div class="hud-sub">5 SEC COUNTDOWN THEN SCREENSHOT SENDS</div></div></div>
+        <div class="hud-right" style="color:var(--cyan)" id="grabProgress">—</div>
+      </div>
+      <div class="hud-row">
+        <div class="hud-left"><div class="hud-ico">👤</div><div><div class="hud-label">CONNECTED TO</div><div class="hud-sub" id="connectedToLabel">—</div></div></div>
+        <div class="status-pill" style="margin:0"><div class="dot dot-green"></div><div class="pill-text">LIVE</div></div>
+      </div>
+    </div>
+    <div id="receiverHUD" style="display:none;">
+      <div class="hud-row">
+        <div class="hud-left"><div class="hud-ico">🤚</div><div><div class="hud-label">OPEN PALM</div><div class="hud-sub">HOLD TO REVEAL QUEUED SCREENSHOTS</div></div></div>
+        <div class="hud-right" id="palmProgress" style="color:var(--green);">—</div>
+      </div>
+      <div class="hud-row">
+        <div class="hud-left"><div class="hud-ico">📦</div><div><div class="hud-label">QUEUE</div><div class="hud-sub" id="queueLabel">NO SCREENSHOTS WAITING</div></div></div>
+        <span class="queue-badge" id="queueCount" style="display:none;">0</span>
+      </div>
+    </div>
+    <div id="galleryWrap" style="display:none;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:3px;color:var(--dim);padding:0 2px 6px;">RECEIVED</div>
+      <div id="gallery"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 4: MOCKUPS -->
+<div class="screen hidden" id="mockupScreen">
+  <div class="mockup-header"><h2>HOW IT WORKS</h2><p>// STEP BY STEP VISUAL GUIDE</p></div>
+  <div class="mockup-row">
+
+    <div class="mockup-step">
+      <div class="mockup-step-header"><div class="step-num">1</div><div><div class="step-title">BOTH PHONES OPEN THE URL</div><div class="step-sub">ANY BROWSER — NO INSTALL NEEDED</div></div></div>
+      <div class="mockup-phones">
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div class="mini-logo">PHYSIX</div><div style="font-size:6px;color:var(--dim);font-family:'Share Tech Mono',monospace;">AIR SHARE</div><div style="height:1px;background:var(--border);width:100%;margin:3px 0;"></div><div style="font-size:6px;color:var(--text);font-family:'Share Tech Mono',monospace;">Name: Alex</div><div style="font-size:22px;">✊</div><div style="font-size:7px;color:var(--cyan);font-family:'Share Tech Mono',monospace;letter-spacing:1px;">SENDER</div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE A</div></div>
+        <div class="arrow-between">⟷</div>
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div class="mini-logo">PHYSIX</div><div style="font-size:6px;color:var(--dim);font-family:'Share Tech Mono',monospace;">AIR SHARE</div><div style="height:1px;background:var(--border);width:100%;margin:3px 0;"></div><div style="font-size:6px;color:var(--text);font-family:'Share Tech Mono',monospace;">Name: Jamie</div><div style="font-size:22px;">🤚</div><div style="font-size:7px;color:var(--purple);font-family:'Share Tech Mono',monospace;letter-spacing:1px;">RECEIVER</div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE B</div></div>
+      </div>
+      <div class="mockup-caption">Both people open the same URL. Enter name, pick role: Sender ✊ or Receiver 🤚.</div>
+    </div>
+
+    <div class="mockup-step">
+      <div class="mockup-step-header"><div class="step-num">2</div><div><div class="step-title">CONNECT WITH A CODE</div><div class="step-sub">SENDER SHOWS CODE — RECEIVER ENTERS IT</div></div></div>
+      <div class="mockup-phones">
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div style="font-size:6px;color:var(--dim);font-family:'Share Tech Mono',monospace;letter-spacing:1px;">YOUR CODE</div><div class="mini-code">A7F2</div><div style="font-size:6px;color:var(--amber);font-family:'Share Tech Mono',monospace;margin-top:4px;">● WAITING…</div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE A</div></div>
+        <div class="arrow-between">→</div>
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div style="font-size:6px;color:var(--dim);font-family:'Share Tech Mono',monospace;letter-spacing:1px;">ENTER CODE</div><div class="mini-input">A7F2</div><div style="margin-top:6px;background:var(--cyan);border-radius:3px;padding:3px;text-align:center;"><span style="font-size:7px;font-weight:700;color:#000;letter-spacing:1px;">CONNECT</span></div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE B</div></div>
+      </div>
+      <div class="mockup-caption">Sender gets a 4-letter code. Receiver types it. P2P connection — no server stores your screenshots.</div>
+    </div>
+
+    <div class="mockup-step">
+      <div class="mockup-step-header"><div class="step-num">3</div><div><div class="step-title">SENDER: GRAB FIST ✊</div><div class="step-sub">HOLD FOR 1 SECOND → SCREENSHOT QUEUED</div></div></div>
+      <div class="mockup-phones">
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div style="font-size:6px;color:var(--cyan);font-family:'Share Tech Mono',monospace;">// SENDER</div><div style="width:100%;height:52px;background:#050a0f;border-radius:6px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;flex-direction:column;gap:2px;"><div style="font-size:22px;">✊</div><div style="width:60%;height:2px;background:var(--cyan);border-radius:1px;opacity:0.8;"></div></div><div style="font-size:6px;color:var(--cyan);font-family:'Share Tech Mono',monospace;letter-spacing:1px;">📸 CAPTURING…</div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE A</div></div>
+        <div class="arrow-between">📡</div>
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div style="font-size:6px;color:var(--purple);font-family:'Share Tech Mono',monospace;">// RECEIVER</div><div style="width:100%;height:52px;background:#050a0f;border-radius:6px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;"><div style="font-size:22px;">✋</div></div><div class="mini-queue">📦 1 QUEUED</div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE B</div></div>
+      </div>
+      <div class="mockup-caption">Grab fist detected → page screenshot taken and sent instantly. Phone B queues it silently until palm opens.</div>
+    </div>
+
+    <div class="mockup-step">
+      <div class="mockup-step-header"><div class="step-num">4</div><div><div class="step-title">RECEIVER: OPEN PALM 🤚</div><div class="step-sub">HOLD TO REVEAL — NOTIFICATION APPEARS</div></div></div>
+      <div class="mockup-phones">
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div style="font-size:6px;color:var(--cyan);font-family:'Share Tech Mono',monospace;">// SENDER</div><div style="width:100%;height:52px;background:#050a0f;border-radius:6px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;"><div style="font-size:22px;">✋</div></div><div class="mini-status"><div class="mini-dot"></div>SENT ✓</div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE A</div></div>
+        <div class="arrow-between">🔔</div>
+        <div class="mockup-phone"><div class="phone-frame"><div class="phone-notch"></div><div class="phone-screen"><div class="mini-notif"><div class="mini-notif-title">📸 From Alex</div><div class="mini-notif-meta">14:32 • tap to save</div><div class="mini-thumb">🖼️</div></div><div style="font-size:6px;color:var(--green);font-family:'Share Tech Mono',monospace;margin-top:3px;">✓ RECEIVED</div></div><div class="phone-bottom"></div></div><div class="phone-label">PHONE B</div></div>
+      </div>
+      <div class="mockup-caption">Palm opens → notification slides down showing screenshot preview, sender name & timestamp. Tap ⬇ to save to device.</div>
+    </div>
+
+  </div>
+  <button class="btn btn-cyan" style="max-width:360px;margin-top:24px;margin-bottom:8px;" onclick="showScreen('welcomeScreen')">← BACK TO APP</button>
+  <div style="height:40px;"></div>
+</div>
+
+<!-- Nav Tabs -->
+<div id="navTabs">
+  <button class="nav-tab active" id="tabGesture" onclick="switchTab('gesture')"><span class="tab-ico">✋</span><span class="tab-label">GESTURE</span></button>
+  <button class="nav-tab" id="tabGallery" onclick="switchTab('gallery')"><span class="tab-ico">🖼️</span><span class="tab-label">RECEIVED</span></button>
+  <button class="nav-tab" id="tabRole" onclick="switchRole()"><span class="tab-ico" id="roleTabIco">↔️</span><span class="tab-label" id="roleTabLabel">BE RECEIVER</span></button>
+  <button class="nav-tab" id="tabDisconnect" onclick="disconnect()"><span class="tab-ico">⏹</span><span class="tab-label">STOP</span></button>
+</div>
+
+<script>
+// Starfield
+(function(){const c=document.getElementById('stars');for(let i=0;i<80;i++){const s=document.createElement('div');s.className='star';const sz=Math.random()*2+0.5;s.style.cssText=`width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;animation-duration:${Math.random()*4+2}s;animation-delay:${Math.random()*4}s;`;c.appendChild(s);}})();
+
+let myName='',myMode='sender',peer=null,conn=null,myPeerId='';
+let grabFrames=0,palmFrames=0;
+const GRAB_T=12,PALM_T=10;
+let screenshotQueue=[],receivedItems=[];
+let loopGen=0;
+let facingMode='user';       // 'user' = front, 'environment' = back
+let countdownActive=false;   // true while 5s countdown is running
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  document.getElementById('navTabs').classList.toggle('visible',id==='gestureScreen');
+}
+
+function selectMode(m){
+  myMode=m;
+  document.getElementById('cardSender').classList.toggle('selected',m==='sender');
+  document.getElementById('cardReceiver').classList.toggle('selected',m==='receiver');
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  if(tab==='gesture'){
+    document.getElementById('tabGesture').classList.add('active');
+    document.getElementById('videoWrap').style.display='block';
+    document.getElementById('galleryWrap').style.display='none';
+    document.getElementById('senderHUD').style.display=myMode==='sender'?'flex':'none';
+    document.getElementById('receiverHUD').style.display=myMode==='receiver'?'flex':'none';
+  } else {
+    document.getElementById('tabGallery').classList.add('active');
+    document.getElementById('videoWrap').style.display='none';
+    document.getElementById('galleryWrap').style.display='block';
+    document.getElementById('senderHUD').style.display='none';
+    document.getElementById('receiverHUD').style.display='none';
+  }
+}
+
+function goToConnect(){
+  myName=document.getElementById('nameInput').value.trim()||'Unknown';
+  showScreen('connectScreen');
+  document.getElementById('connectTitle').textContent=myMode.toUpperCase();
+  document.getElementById('senderConnect').style.display=myMode==='sender'?'block':'none';
+  document.getElementById('receiverConnect').style.display=myMode==='receiver'?'block':'none';
+  initPeer();
+}
+
+function initPeer(){
+  if(typeof Peer==='undefined'){
+    updateConnectStatus('LOADING PEERJS...','amber');
+    setTimeout(initPeer,500);
+    return;
+  }
+  if(peer){try{peer.destroy();}catch(e){}peer=null;}
+  const shortId=myMode==='sender'?'PX'+Math.random().toString(36).substr(2,4).toUpperCase():undefined;
+  peer=new Peer(shortId,{host:'0.peerjs.com',port:443,secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'}]}});
+  peer.on('open',id=>{
+    myPeerId=id;
+    if(myMode==='sender'){
+      document.getElementById('myCode').textContent=id;
+      updateConnectStatus('WAITING FOR RECEIVER...','amber');
+    }
+  });
+  // Sender: handle incoming connection from receiver
+  peer.on('connection',c=>{
+    conn=c;
+    conn.on('open',()=>{
+      conn.send(JSON.stringify({type:'HELLO',name:myName}));
+      setupConnData();
+      goToGestureScreen();
+    });
+  });
+  peer.on('error',e=>{
+    console.error('Peer error:',e.type,e);
+    updateConnectStatus('ERROR: '+e.type+' — RELOAD','red');
+  });
+}
+
+function updateConnectStatus(text,color){
+  const el=document.getElementById('connectStatus');
+  if(el){el.querySelector('.dot').className='dot dot-'+color;el.querySelector('.pill-text').textContent=text;}
+}
+
+function connectToPeer(){
+  const code=document.getElementById('codeInput').value.trim().toUpperCase();
+  if(!code)return;
+  if(!peer){setStatus('receiverStatus','red','NOT READY — WAIT');return;}
+  setStatus('receiverStatus','amber','CONNECTING...');
+  conn=peer.connect(code,{reliable:true});
+  conn.on('open',()=>{
+    conn.send(JSON.stringify({type:'HELLO',name:myName}));
+    setupConnData();
+    goToGestureScreen();
+  });
+  conn.on('error',e=>{
+    console.error('Conn error:',e);
+    setStatus('receiverStatus','red','FAILED — CHECK CODE');
+  });
+}
+
+function setupConnData(){
+  conn.on('data',data=>{
+    try{
+      const msg=JSON.parse(data);
+      if(msg.type==='HELLO'){
+        document.getElementById('connectedToLabel').textContent=msg.name;
+      }
+      if(msg.type==='ROLE_CHANGE'){
+        // Peer switched their role — auto-switch ours to the opposite
+        const theirRole = msg.role;
+        const ourNewRole = theirRole==='sender' ? 'receiver' : 'sender';
+        myMode = ourNewRole;
+        applyRoleUI();
+        showNotif(
+          msg.name+' switched to '+theirRole.toUpperCase(),
+          'You are now automatically '+ourNewRole.toUpperCase(),
+          ''
+        );
+      }
+      if(msg.type==='SCREENSHOT') handleIncoming(msg);
+    }catch(e){console.warn('Bad data:',e);}
+  });
+  conn.on('close',()=>showNotif('Connection lost','',''));
+}
+
+function setStatus(id,color,text){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.querySelector('.dot').className='dot dot-'+color;
+  el.querySelector('.pill-text').textContent=text;
+}
+
+// ── ROLE SWITCHING (no reconnect needed) ─────────────────────────────────────
+function switchRole(){
+  myMode = myMode==='sender' ? 'receiver' : 'sender';
+  applyRoleUI();
+  // Tell the other device our new role
+  if(conn && conn.open){
+    conn.send(JSON.stringify({ type:'ROLE_CHANGE', name:myName, role:myMode }));
+  }
+}
+
+function applyRoleUI(){
+  const isSender = myMode==='sender';
+  document.getElementById('activeModeBadge').textContent = isSender ? '// SENDER MODE' : '// RECEIVER MODE';
+  document.getElementById('senderHUD').style.display   = isSender ? 'flex' : 'none';
+  document.getElementById('receiverHUD').style.display = isSender ? 'none' : 'flex';
+  document.getElementById('chipGrab').style.display    = isSender ? 'flex' : 'none';
+  document.getElementById('chipPalm').style.display    = isSender ? 'none' : 'flex';
+  // Update nav tab label
+  document.getElementById('roleTabLabel').textContent  = isSender ? 'BE RECEIVER' : 'BE SENDER';
+  document.getElementById('roleTabIco').textContent    = isSender ? '🤚' : '✊';
+  // Reset gesture counters
+  grabFrames=0; palmFrames=0;
+  // Reset ring
+  document.getElementById('grabRing').style.opacity='0';
+  document.getElementById('grabArc').setAttribute('stroke-dashoffset','226');
+  document.getElementById('grabProgress').textContent='—';
+  document.getElementById('palmProgress').textContent='—';
+  // Show a quick flash notification
+  showNotif(isSender ? '✊ You are now SENDER' : '🤚 You are now RECEIVER','Role switched — no reconnect needed','');
+}
+
+// ── CAMERA FLIP ──────────────────────────────────────────────────────────────
+function flipCamera(){
+  facingMode = facingMode==='user' ? 'environment' : 'user';
+  const btn = document.getElementById('btnFlipCam');
+  btn.textContent = facingMode==='user' ? '🔄' : '📷';
+  // Flip the video mirror — front cam needs mirroring, back cam doesn't
+  document.getElementById('video').style.transform = facingMode==='user' ? 'scaleX(-1)' : 'scaleX(1)';
+  startCamera(); // restart with new facing mode
+}
+
+// ── COUNTDOWN THEN CAPTURE ───────────────────────────────────────────────────
+function startCountdown(){
+  if(countdownActive) return;
+  countdownActive = true;
+  grabFrames = 0; // reset so fist detection doesn't re-trigger during countdown
+
+  const overlay = document.getElementById('countdownOverlay');
+  const numEl   = document.getElementById('countdownNumber');
+  overlay.style.display = 'flex';
+
+  let count = 5;
+  numEl.textContent = count;
+
+  // Pulse animation each second
+  const tick = () => {
+    numEl.style.transform = 'scale(1.3)';
+    setTimeout(()=> numEl.style.transform = 'scale(1)', 200);
+  };
+  tick();
+
+  const interval = setInterval(()=>{
+    count--;
+    if(count <= 0){
+      clearInterval(interval);
+      overlay.style.display = 'none';
+      countdownActive = false;
+      captureAndSend();
+    } else {
+      numEl.textContent = count;
+      tick();
+    }
+  }, 1000);
+}
+
+function goToGestureScreen(){
+  showScreen('gestureScreen');
+  applyRoleUI();
+  startCamera();
+}
+
+function disconnect(){
+  loopGen++;
+  if(mpCamera){try{mpCamera.stop();}catch(e){}mpCamera=null;}
+  if(conn){try{conn.close();}catch(e){}conn=null;}
+  if(peer){try{peer.destroy();}catch(e){}peer=null;}
+  showScreen('welcomeScreen');
+}
+
+function captureAndSend(){
+  const fl=document.getElementById('flash');
+  fl.style.transition='none';fl.style.opacity='0.9';
+  setTimeout(()=>{fl.style.transition='opacity .4s';fl.style.opacity='0';},80);
+
+  if(!conn||!conn.open){
+    document.getElementById('grabProgress').textContent='NOT CONNECTED';
+    setTimeout(()=>document.getElementById('grabProgress').textContent='—',2000);
+    return;
+  }
+
+  try{
+    const vid=document.getElementById('video');
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.min(vid.videoWidth||480,480);
+    canvas.height=Math.min(vid.videoHeight||360,360);
+    const ctx=canvas.getContext('2d');
+    // Only mirror front camera — back camera is already correct
+    if(facingMode==='user'){
+      ctx.translate(canvas.width,0);
+      ctx.scale(-1,1);
+    }
+    ctx.drawImage(vid,0,0,canvas.width,canvas.height);
+    const b64=canvas.toDataURL('image/jpeg',0.5).split(',')[1];
+
+    if(!b64||b64.length<100){
+      document.getElementById('grabProgress').textContent='CAMERA NOT READY';
+      setTimeout(()=>document.getElementById('grabProgress').textContent='—',2000);
+      return;
+    }
+
+    const CHUNK=48000;
+    const ts=Date.now();
+    const total=Math.ceil(b64.length/CHUNK);
+    for(let i=0;i<total;i++){
+      conn.send(JSON.stringify({
+        type:'SCREENSHOT',name:myName,timestamp:ts,
+        image:b64.slice(i*CHUNK,(i+1)*CHUNK),
+        chunk:i,total:total
+      }));
+    }
+    showSendAnim();
+  }catch(e){
+    console.error('Capture:',e);
+    document.getElementById('grabProgress').textContent='CAPTURE FAILED';
+    setTimeout(()=>document.getElementById('grabProgress').textContent='—',2000);
+  }
+}
+
+function showSendAnim(){
+  const el=document.getElementById('sendAnim');
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),1800);
+}
+
+// Chunk reassembly — object-based to avoid sparse array bugs
+const chunkBuffer={};
+
+function handleIncoming(msg){
+  if(msg.total===1){
+    screenshotQueue.push(msg);
+    updateQueueDisplay();
+    return;
+  }
+  const key=msg.timestamp+'_'+msg.name;
+  if(!chunkBuffer[key]) chunkBuffer[key]={parts:{},count:0,total:msg.total,name:msg.name,timestamp:msg.timestamp};
+  const buf=chunkBuffer[key];
+  if(buf.parts[msg.chunk]===undefined){
+    buf.parts[msg.chunk]=msg.image;
+    buf.count++;
+  }
+  if(buf.count===buf.total){
+    const fullImage=Object.keys(buf.parts).sort((a,b)=>a-b).map(k=>buf.parts[k]).join('');
+    screenshotQueue.push({type:'SCREENSHOT',name:buf.name,timestamp:buf.timestamp,image:fullImage});
+    delete chunkBuffer[key];
+    updateQueueDisplay();
+  }
+}
+
+function flushQueue(){
+  if(!screenshotQueue.length)return;
+  screenshotQueue.forEach(msg=>{
+    receivedItems.unshift(msg);
+    showNotif('From '+msg.name,formatTime(msg.timestamp)+' — tap to save',msg.image);
+    addToGallery(msg);
+  });
+  screenshotQueue=[];
+  updateQueueDisplay();
+}
+
+function updateQueueDisplay(){
+  const n=screenshotQueue.length;
+  const badge=document.getElementById('queueCount');
+  const label=document.getElementById('queueLabel');
+  if(n>0){badge.style.display='inline';badge.textContent=n;label.textContent=n+' QUEUED';}
+  else{badge.style.display='none';label.textContent='NO SCREENSHOTS WAITING';}
+}
+
+// Gallery — use closure to avoid giant base64 in HTML attributes
+const galleryImages={};
+let galleryIdx=0;
+
+function addToGallery(msg){
+  const g=document.getElementById('gallery');
+  const src='data:image/jpeg;base64,'+msg.image;
+  const idx=galleryIdx++;
+  galleryImages[idx]=src;
+  const d=document.createElement('div');
+  d.className='gallery-item';
+  d.innerHTML=`<img class="gallery-thumb" src="${src}"/><div class="gallery-info"><div class="gallery-from">From ${msg.name}</div><div class="gallery-time">${formatTime(msg.timestamp)}</div></div><span class="gallery-dl" data-idx="${idx}">⬇</span>`;
+  d.querySelector('.gallery-dl').addEventListener('click',()=>dlImg(galleryImages[idx],msg.name));
+  g.prepend(d);
+  document.getElementById('galleryWrap').style.display='block';
+}
+
+function dlImg(src,name){
+  const a=document.createElement('a');
+  a.href=src;a.download='physix_'+name+'_'+Date.now()+'.jpg';a.click();
+}
+
+function formatTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+
+let toastTimer;
+function showNotif(title,meta,img){
+  document.getElementById('notifTitle').textContent=title;
+  document.getElementById('notifMeta').textContent=meta;
+  const th=document.getElementById('notifThumb');
+  if(img){th.src='data:image/jpeg;base64,'+img;th.style.display='block';}
+  else th.style.display='none';
+  document.getElementById('notifToast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>document.getElementById('notifToast').classList.remove('show'),5000);
+}
+document.getElementById('notifClose').onclick=()=>document.getElementById('notifToast').classList.remove('show');
+
+// ══════════════════════════════════════════════════════
+// GESTURE ENGINE — MediaPipe Hands (proven working)
+// ══════════════════════════════════════════════════════
+let mpCamera = null;
+
+function detectGesture(lm) {
+  const tips  = [4, 8, 12, 16, 20];
+  const bases = [2, 5,  9, 13, 17];
+
+  const extended = tips.map((tip, i) => {
+    if (i === 0) return Math.abs(lm[tip].x - lm[bases[i]].x) > 0.06;
+    return lm[tip].y < lm[bases[i]].y - 0.03;
+  });
+
+  const extCount = extended.filter(Boolean).length;
+
+  if (extCount === 0) return 'grab';
+
+  const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+  if (pinchDist < 0.07 && !extended[2] && !extended[3] && !extended[4]) return 'pinch';
+
+  if (extended[1] && !extended[2] && !extended[3] && !extended[4]) return 'point';
+
+  if (extCount >= 4) return 'open';
+
+  return 'none';
+}
+
+function updateDebug(msg, color) {
+  const dbg = document.getElementById('gestureDebug');
+  if (dbg) { dbg.textContent = msg; dbg.style.color = color || 'var(--dim)'; }
+}
+
+const mpHands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+mpHands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.6,
+});
+
+mpHands.onResults(results => {
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const lm = results.multiHandLandmarks[0];
+    const g  = detectGesture(lm);
+
+    const dbg = document.getElementById('gestureDebug');
+    if (dbg) {
+      const icons = { grab:'FIST DETECTED', open:'PALM OPEN', point:'POINTING', pinch:'PINCH', none:'HAND VISIBLE' };
+      dbg.textContent = icons[g] || g;
+      dbg.style.color = g==='grab' ? 'var(--red)' : g==='open' ? 'var(--green)' : 'var(--cyan)';
+    }
+
+    if (myMode === 'sender') processSender(g);
+    else                     processReceiver(g);
+  } else {
+    updateDebug('NO HAND — show fist or palm', 'var(--dim)');
+    grabFrames = Math.max(0, grabFrames - 1);
+    palmFrames = Math.max(0, palmFrames - 1);
+  }
+});
+
+function processSender(g) {
+  // Ignore gesture input while countdown is running
+  if(countdownActive) return;
+
+  const prog = document.getElementById('grabProgress');
+  const arc  = document.getElementById('grabArc');
+  const ring = document.getElementById('grabRing');
+  const chip = document.getElementById('chipGrab');
+
+  if (g === 'grab') {
+    grabFrames++;
+    chip.classList.add('active');
+    ring.style.opacity = '1';
+    const pct = Math.min(grabFrames / GRAB_T, 1);
+    arc.setAttribute('stroke-dashoffset', 226 - (226 * pct));
+    prog.textContent = Math.round(pct * 100) + '%';
+    if (grabFrames >= GRAB_T) {
+      grabFrames = 0;
+      arc.setAttribute('stroke-dashoffset', '226');
+      ring.style.opacity = '0';
+      prog.textContent = '5...';
+      startCountdown(); // 5 sec countdown then captureAndSend
+    }
+  } else {
+    grabFrames = Math.max(0, grabFrames - 1);
+    chip.classList.remove('active');
+    if (grabFrames === 0) {
+      ring.style.opacity = '0';
+      prog.textContent = '—';
+      arc.setAttribute('stroke-dashoffset', '226');
+    }
+  }
+}
+
+function processReceiver(g) {
+  const prog = document.getElementById('palmProgress');
+  const chip = document.getElementById('chipPalm');
+
+  if (g === 'open') {
+    palmFrames++;
+    chip.classList.add('active');
+    prog.textContent = Math.round(Math.min(palmFrames / PALM_T, 1) * 100) + '%';
+    if (palmFrames >= PALM_T && screenshotQueue.length > 0) {
+      palmFrames = 0;
+      prog.textContent = 'OK';
+      flushQueue();
+    }
+  } else {
+    palmFrames = Math.max(0, palmFrames - 1);
+    chip.classList.remove('active');
+    if (palmFrames === 0) prog.textContent = '—';
+  }
+}
+
+async function startCamera() {
+  updateDebug('STARTING CAMERA...', 'var(--amber)');
+  grabFrames = 0;
+  palmFrames = 0;
+  countdownActive = false;
+  document.getElementById('countdownOverlay').style.display = 'none';
+
+  // Stop any existing camera
+  if (mpCamera) { try { mpCamera.stop(); } catch(e) {} mpCamera = null; }
+
+  const vid = document.getElementById('video');
+  // Mirror only for front camera
+  vid.style.transform = facingMode==='user' ? 'scaleX(-1)' : 'scaleX(1)';
+
+  mpCamera = new Camera(vid, {
+    onFrame: async () => {
+      await mpHands.send({ image: vid });
+    },
+    width: 640,
+    height: 480,
+    facingMode: facingMode,
+  });
+
+  mpCamera.start()
+    .then(() => updateDebug('READY — show your hand', 'var(--green)'))
+    .catch(e => updateDebug('CAM ERROR: ' + e.message, 'var(--red)'));
+}
+</script>
+</body>
+</html>
