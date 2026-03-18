@@ -498,18 +498,20 @@ function applyRoleUI(){
   document.getElementById('grabArc').setAttribute('stroke-dashoffset','226');
   document.getElementById('grabProgress').textContent='—';
   document.getElementById('palmProgress').textContent='—';
-  // Show a quick flash notification
-  showNotif(isSender ? '✊ You are now SENDER' : '🤚 You are now RECEIVER','Role switched — no reconnect needed','');
+  // Show a quick status update (only if connected)
+  if(conn && conn.open){
+    showNotif(isSender ? '✊ You are now SENDER' : '🤚 You are now RECEIVER','Role switched — no reconnect needed','');
+  }
 }
 
 // ── CAMERA FLIP ──────────────────────────────────────────────────────────────
-function flipCamera(){
+async function flipCamera(){
   facingMode = facingMode==='user' ? 'environment' : 'user';
   const btn = document.getElementById('btnFlipCam');
   btn.textContent = facingMode==='user' ? '🔄' : '📷';
-  // Flip the video mirror — front cam needs mirroring, back cam doesn't
-  document.getElementById('video').style.transform = facingMode==='user' ? 'scaleX(-1)' : 'scaleX(1)';
-  startCamera(); // restart with new facing mode
+  btn.disabled = true;
+  await startCamera();
+  btn.disabled = false;
 }
 
 // ── COUNTDOWN THEN CAPTURE ───────────────────────────────────────────────────
@@ -687,11 +689,16 @@ function showNotif(title,meta,img){
   document.getElementById('notifTitle').textContent=title;
   document.getElementById('notifMeta').textContent=meta;
   const th=document.getElementById('notifThumb');
-  if(img){th.src='data:image/jpeg;base64,'+img;th.style.display='block';}
-  else th.style.display='none';
+  if(img && img.length > 10){
+    th.src='data:image/jpeg;base64,'+img;
+    th.style.display='block';
+  } else {
+    th.style.display='none';
+    th.src='';
+  }
   document.getElementById('notifToast').classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>document.getElementById('notifToast').classList.remove('show'),5000);
+  toastTimer=setTimeout(()=>document.getElementById('notifToast').classList.remove('show'),4000);
 }
 document.getElementById('notifClose').onclick=()=>document.getElementById('notifToast').classList.remove('show');
 
@@ -821,25 +828,59 @@ async function startCamera() {
   countdownActive = false;
   document.getElementById('countdownOverlay').style.display = 'none';
 
-  // Stop any existing camera
-  if (mpCamera) { try { mpCamera.stop(); } catch(e) {} mpCamera = null; }
+  // Stop existing MediaPipe camera wrapper
+  if(mpCamera){ try{ mpCamera.stop(); }catch(e){} mpCamera=null; }
 
+  // Stop existing raw stream tracks
   const vid = document.getElementById('video');
-  // Mirror only for front camera
+  if(vid.srcObject){
+    vid.srcObject.getTracks().forEach(t=>t.stop());
+    vid.srcObject = null;
+  }
+
+  // Small delay so OS fully releases camera hardware before re-acquiring
+  await new Promise(r=>setTimeout(r,300));
+
+  // Get camera stream directly — bypasses MediaPipe Camera wrapper
+  // which doesn't reliably pass facingMode on mobile
+  let stream;
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode: { ideal: facingMode }, width:{ideal:640}, height:{ideal:480} },
+      audio: false
+    });
+  } catch(e){
+    // Fallback: try without facingMode constraint if device rejects it
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+    } catch(e2){
+      updateDebug('CAM ERROR: '+e2.message, 'var(--red)');
+      return;
+    }
+  }
+
+  vid.srcObject = stream;
   vid.style.transform = facingMode==='user' ? 'scaleX(-1)' : 'scaleX(1)';
 
-  mpCamera = new Camera(vid, {
-    onFrame: async () => {
-      await mpHands.send({ image: vid });
-    },
-    width: 640,
-    height: 480,
-    facingMode: facingMode,
+  // Wait for video to be playing
+  await new Promise((resolve, reject)=>{
+    vid.oncanplay = resolve;
+    vid.onerror   = reject;
+    vid.play().catch(reject);
   });
 
-  mpCamera.start()
-    .then(() => updateDebug('READY — show your hand', 'var(--green)'))
-    .catch(e => updateDebug('CAM ERROR: ' + e.message, 'var(--red)'));
+  updateDebug('READY — show your hand', 'var(--green)');
+
+  // Run detection loop manually — send each frame to MediaPipe
+  const myGen = ++loopGen;
+  const loop = async () => {
+    if(loopGen !== myGen) return; // stop if camera was restarted
+    if(vid.readyState >= 2){ // HAVE_CURRENT_DATA
+      try{ await mpHands.send({ image: vid }); } catch(e){}
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
 }
 </script>
 </body>
