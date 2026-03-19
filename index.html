@@ -4,25 +4,36 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>PHYSIX SHARE</title>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<!-- MediaPipe Hands — same setup that worked in eye-hand interface -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<!-- FIX #11: Dynamic PeerJS load with onerror on primary CDN too -->
 <script>
-window.addEventListener('DOMContentLoaded', function() {
-  if (typeof Peer === 'undefined') {
+(function(){
+  function loadPeer(src, fallback){
     var s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js';
-    s.onerror = function(){ document.getElementById('peerError').style.display='block'; };
+    s.src = src;
+    s.onload = function(){
+      if(typeof Peer === 'undefined' && fallback) loadPeer(fallback, null);
+    };
+    s.onerror = function(){
+      if(fallback) loadPeer(fallback, null);
+      else document.getElementById('peerError').style.display='block';
+    };
     document.head.appendChild(s);
   }
-});
+  loadPeer(
+    'https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js'
+  );
+})();
 </script>
+<!-- MediaPipe Hands -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap');
 :root{--bg:#030508;--surface:#080d14;--card:#0c1520;--border:rgba(0,200,255,0.15);--cyan:#00c8ff;--cyan2:#00fff7;--amber:#ffb800;--red:#ff3c5a;--green:#00ff88;--purple:#a855f7;--text:#c5dff0;--dim:#3a5a6a;--glow:rgba(0,200,255,0.12);}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;touch-action:none;user-select:none;}
+/* FIX #1 (primary): Removed touch-action:none from html,body — it was blocking all taps on mobile */
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;user-select:none;}
 #stars{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
 .star{position:absolute;border-radius:50%;background:#fff;animation:twinkle linear infinite;}
 @keyframes twinkle{0%,100%{opacity:0.1}50%{opacity:0.8}}
@@ -58,8 +69,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .dot-dim{background:var(--dim);}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
 .pill-text{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text);}
-#gestureScreen{background:var(--bg);}
-#videoWrap{position:relative;width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#000;}
+/* FIX #1 (scoped): touch-action:none only on gesture screen to block scroll/zoom during hand tracking */
+#gestureScreen{background:var(--bg);touch-action:none;}
+#videoWrap{position:relative;width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#000;touch-action:none;}
 #video{width:100%;display:block;transform:scaleX(-1);opacity:0.75;}
 #gestureOverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:12px;pointer-events:none;}
 .gesture-bar{display:flex;gap:8px;}
@@ -246,7 +258,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 
   <div id="videoWrap" style="max-width:360px;">
     <video id="video" autoplay muted playsinline></video>
-    <canvas id="debugCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1);"></canvas>
+    <!-- FIX #10: Removed dead debugCanvas — nothing was ever drawn to it -->
     <!-- Countdown overlay inside video -->
     <div id="countdownOverlay" style="position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(3,5,8,0.82);border-radius:12px;">
       <div id="countdownNumber" style="font-family:'Rajdhani',sans-serif;font-size:110px;font-weight:700;color:var(--cyan);text-shadow:0 0 40px var(--cyan);line-height:1;">5</div>
@@ -413,8 +425,9 @@ function switchTab(tab){
     document.getElementById('tabGesture').classList.add('active');
     document.getElementById('videoWrap').style.display='block';
     document.getElementById('galleryWrap').style.display='none';
-    document.getElementById('senderHUD').style.display=myMode==='sender'?'flex':'none';
-    document.getElementById('receiverHUD').style.display=myMode==='receiver'?'flex':'none';
+    // FIX #7: Use 'block' not 'flex' for HUD containers — they hold block-level rows
+    document.getElementById('senderHUD').style.display=myMode==='sender'?'block':'none';
+    document.getElementById('receiverHUD').style.display=myMode==='receiver'?'block':'none';
   } else {
     document.getElementById('tabGallery').classList.add('active');
     document.getElementById('videoWrap').style.display='none';
@@ -430,7 +443,8 @@ function goToConnect(){
   document.getElementById('connectTitle').textContent=myMode.toUpperCase();
   document.getElementById('senderConnect').style.display=myMode==='sender'?'block':'none';
   document.getElementById('receiverConnect').style.display=myMode==='receiver'?'block':'none';
-  initPeer();
+  // FIX #8: Only init peer if not already open — prevents destroying active connection on back/forward
+  if(!peer || peer.destroyed) initPeer();
 }
 
 function initPeer(){
@@ -443,11 +457,8 @@ function initPeer(){
   if(peer){try{peer.destroy();}catch(e){}peer=null;}
   diag('Creating Peer (mode='+myMode+')','#00c8ff');
   const shortId=myMode==='sender'?'PX'+Math.random().toString(36).substr(2,4).toUpperCase():undefined;
-  peer = new Peer(shortId, {
-  host: 'peerjs-server.herokuapp.com',
-  secure: true,
-  port: 443
-});
+  // FIX #2: Use PeerJS official cloud server — Heroku free tier shut down in 2022
+  peer = new Peer(shortId);
   peer.on('open',id=>{
     myPeerId=id;
     diag('Peer open — ID: '+id,'#00ff88');
@@ -504,7 +515,6 @@ function setupConnData(){
         document.getElementById('connectedToLabel').textContent=msg.name;
       }
       if(msg.type==='ROLE_CHANGE'){
-        // Peer switched their role — auto-switch ours to the opposite
         const theirRole = msg.role;
         const ourNewRole = theirRole==='sender' ? 'receiver' : 'sender';
         myMode = ourNewRole;
@@ -532,7 +542,6 @@ function setStatus(id,color,text){
 function switchRole(){
   myMode = myMode==='sender' ? 'receiver' : 'sender';
   applyRoleUI();
-  // Tell the other device our new role
   if(conn && conn.open){
     conn.send(JSON.stringify({ type:'ROLE_CHANGE', name:myName, role:myMode }));
   }
@@ -541,21 +550,23 @@ function switchRole(){
 function applyRoleUI(){
   const isSender = myMode==='sender';
   document.getElementById('activeModeBadge').textContent = isSender ? '// SENDER MODE' : '// RECEIVER MODE';
-  document.getElementById('senderHUD').style.display   = isSender ? 'flex' : 'none';
-  document.getElementById('receiverHUD').style.display = isSender ? 'none' : 'flex';
+  // FIX #7: Use 'block' not 'flex' for HUD containers
+  document.getElementById('senderHUD').style.display   = isSender ? 'block' : 'none';
+  document.getElementById('receiverHUD').style.display = isSender ? 'none' : 'block';
   document.getElementById('chipGrab').style.display    = isSender ? 'flex' : 'none';
   document.getElementById('chipPalm').style.display    = isSender ? 'none' : 'flex';
-  // Update nav tab label
   document.getElementById('roleTabLabel').textContent  = isSender ? 'BE RECEIVER' : 'BE SENDER';
   document.getElementById('roleTabIco').textContent    = isSender ? '🤚' : '✊';
   // Reset gesture counters
   grabFrames=0; palmFrames=0;
+  // FIX #9: Also reset countdownActive on role switch — prevents countdown getting stuck
+  countdownActive=false;
+  document.getElementById('countdownOverlay').style.display='none';
   // Reset ring
   document.getElementById('grabRing').style.opacity='0';
   document.getElementById('grabArc').setAttribute('stroke-dashoffset','226');
   document.getElementById('grabProgress').textContent='—';
   document.getElementById('palmProgress').textContent='—';
-  // Show a quick status update (only if connected)
   if(conn && conn.open){
     showNotif(isSender ? '✊ You are now SENDER' : '🤚 You are now RECEIVER','Role switched — no reconnect needed','');
   }
@@ -575,7 +586,7 @@ async function flipCamera(){
 function startCountdown(){
   if(countdownActive) return;
   countdownActive = true;
-  grabFrames = 0; // reset so fist detection doesn't re-trigger during countdown
+  grabFrames = 0;
 
   const overlay = document.getElementById('countdownOverlay');
   const numEl   = document.getElementById('countdownNumber');
@@ -584,7 +595,6 @@ function startCountdown(){
   let count = 5;
   numEl.textContent = count;
 
-  // Pulse animation each second
   const tick = () => {
     numEl.style.transform = 'scale(1.3)';
     setTimeout(()=> numEl.style.transform = 'scale(1)', 200);
@@ -632,19 +642,29 @@ function captureAndSend(){
 
   try{
     const vid=document.getElementById('video');
+
+    // FIX #4: Guard moved BEFORE canvas operations so we never read a blank canvas
+    if (!vid.videoWidth || !vid.videoHeight) {
+      diag('Video not ready for capture', '#ffb800');
+      document.getElementById('grabProgress').textContent='CAMERA NOT READY';
+      setTimeout(()=>document.getElementById('grabProgress').textContent='—',2000);
+      return;
+    }
+
     const canvas=document.createElement('canvas');
-    canvas.width=Math.min(vid.videoWidth||480,480);
-    canvas.height=Math.min(vid.videoHeight||360,360);
+    canvas.width=Math.min(vid.videoWidth,480);
+    canvas.height=Math.min(vid.videoHeight,360);
     const ctx=canvas.getContext('2d');
+
     // Only mirror front camera — back camera is already correct
     if(facingMode==='user'){
       ctx.translate(canvas.width,0);
       ctx.scale(-1,1);
     }
-    if (!vid.videoWidth || !vid.videoHeight) {
-  diag('Video not ready for capture', '#ffb800');
-  return;
-}
+
+    // FIX #3: Actually draw the video frame onto the canvas before reading it
+    ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+
     const b64=canvas.toDataURL('image/jpeg',0.5).split(',')[1];
 
     if(!b64||b64.length<100){
@@ -694,7 +714,8 @@ function handleIncoming(msg){
     buf.count++;
   }
   if(buf.count===buf.total){
-    const fullImage=Object.keys(buf.parts).sort((a,b)=>a-b).map(k=>buf.parts[k]).join('');
+    // FIX #6: Explicitly coerce keys to Number before sorting to guarantee numeric order
+    const fullImage=Object.keys(buf.parts).map(Number).sort((a,b)=>a-b).map(k=>buf.parts[k]).join('');
     screenshotQueue.push({type:'SCREENSHOT',name:buf.name,timestamp:buf.timestamp,image:fullImage});
     delete chunkBuffer[key];
     updateQueueDisplay();
@@ -720,7 +741,7 @@ function updateQueueDisplay(){
   else{badge.style.display='none';label.textContent='NO SCREENSHOTS WAITING';}
 }
 
-// Gallery — use closure to avoid giant base64 in HTML attributes
+// Gallery
 const galleryImages={};
 let galleryIdx=0;
 
@@ -763,9 +784,11 @@ function showNotif(title,meta,img){
 document.getElementById('notifClose').onclick=()=>document.getElementById('notifToast').classList.remove('show');
 
 // ══════════════════════════════════════════════════════
-// GESTURE ENGINE — MediaPipe Hands (proven working)
+// GESTURE ENGINE — MediaPipe Hands
+// FIX #5: Defer Hands instantiation until after DOM + scripts are ready
 // ══════════════════════════════════════════════════════
 let mpCamera = null;
+let mpHands  = null;
 
 function detectGesture(lm) {
   const tips  = [4, 8, 12, 16, 20];
@@ -795,51 +818,59 @@ function updateDebug(msg, color) {
   if (dbg) { dbg.textContent = msg; dbg.style.color = color || 'var(--dim)'; }
 }
 
-const mpHands = new Hands({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-});
-if (typeof Hands === 'undefined') {
-  diag('MediaPipe not loaded', '#ff3c5a');
-}
-
-mpHands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.6,
-});
-
-let _frameCount=0, _lastFrameLog=0;
-mpHands.onResults(results => {
-  // Log frame arrival every 60 frames so diag shows camera is alive
-  _frameCount++;
-  if(_frameCount - _lastFrameLog >= 60){
-    _lastFrameLog = _frameCount;
-    diag('Frames OK ('+_frameCount+') — hands: '+(results.multiHandLandmarks?results.multiHandLandmarks.length:0),'#3a5a6a');
+// FIX #5: initMediaPipe() called once we're sure the CDN scripts have loaded
+function initMediaPipe() {
+  if (typeof Hands === 'undefined') {
+    diag('MediaPipe Hands not loaded — retrying in 500ms', '#ffb800');
+    setTimeout(initMediaPipe, 500);
+    return;
   }
+  mpHands = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
 
-  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-    const lm = results.multiHandLandmarks[0];
-    const g  = detectGesture(lm);
+  mpHands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.6,
+  });
 
-    const dbg = document.getElementById('gestureDebug');
-    if (dbg) {
-      const icons = { grab:'FIST DETECTED', open:'PALM OPEN', point:'POINTING', pinch:'PINCH', none:'HAND VISIBLE' };
-      dbg.textContent = icons[g] || g;
-      dbg.style.color = g==='grab' ? 'var(--red)' : g==='open' ? 'var(--green)' : 'var(--cyan)';
+  let _frameCount=0, _lastFrameLog=0;
+  mpHands.onResults(results => {
+    _frameCount++;
+    if(_frameCount - _lastFrameLog >= 60){
+      _lastFrameLog = _frameCount;
+      diag('Frames OK ('+_frameCount+') — hands: '+(results.multiHandLandmarks?results.multiHandLandmarks.length:0),'#3a5a6a');
     }
 
-    if (myMode === 'sender') processSender(g);
-    else                     processReceiver(g);
-  } else {
-    updateDebug('NO HAND — show fist or palm', 'var(--dim)');
-    grabFrames = Math.max(0, grabFrames - 1);
-    palmFrames = Math.max(0, palmFrames - 1);
-  }
-});
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      const lm = results.multiHandLandmarks[0];
+      const g  = detectGesture(lm);
+
+      const dbg = document.getElementById('gestureDebug');
+      if (dbg) {
+        const icons = { grab:'FIST DETECTED', open:'PALM OPEN', point:'POINTING', pinch:'PINCH', none:'HAND VISIBLE' };
+        dbg.textContent = icons[g] || g;
+        dbg.style.color = g==='grab' ? 'var(--red)' : g==='open' ? 'var(--green)' : 'var(--cyan)';
+      }
+
+      if (myMode === 'sender') processSender(g);
+      else                     processReceiver(g);
+    } else {
+      updateDebug('NO HAND — show fist or palm', 'var(--dim)');
+      grabFrames = Math.max(0, grabFrames - 1);
+      palmFrames = Math.max(0, palmFrames - 1);
+    }
+  });
+
+  diag('MediaPipe Hands initialized', '#00ff88');
+}
+
+// Kick off MediaPipe init after page load
+window.addEventListener('load', initMediaPipe);
 
 function processSender(g) {
-  // Ignore gesture input while countdown is running
   if(countdownActive) return;
 
   const prog = document.getElementById('grabProgress');
@@ -859,7 +890,7 @@ function processSender(g) {
       arc.setAttribute('stroke-dashoffset', '226');
       ring.style.opacity = '0';
       prog.textContent = '5...';
-      startCountdown(); // 5 sec countdown then captureAndSend
+      startCountdown();
     }
   } else {
     grabFrames = Math.max(0, grabFrames - 1);
@@ -899,7 +930,6 @@ async function startCamera() {
   countdownActive=false;
   document.getElementById('countdownOverlay').style.display='none';
 
-  // Stop existing camera
   if(mpCamera){ try{ mpCamera.stop(); }catch(e){} mpCamera=null; }
   const vid=document.getElementById('video');
   if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
@@ -907,15 +937,15 @@ async function startCamera() {
   await new Promise(r=>setTimeout(r,350));
   vid.style.transform = facingMode==='user' ? 'scaleX(-1)' : 'scaleX(1)';
 
-  // Acquire stream with correct facingMode BEFORE handing to MediaPipe Camera
   let stream;
   try{
     diag('getUserMedia: '+facingMode,'#00c8ff');
+    // FIX #(camera syntax): Added missing comma between video constraints and audio:false
     stream=await navigator.mediaDevices.getUserMedia({
       video: {
-  facingMode: facingMode === 'user' ? 'user' : { exact: 'environment' }
-}
-      audio:false
+        facingMode: facingMode === 'user' ? 'user' : { exact: 'environment' }
+      },
+      audio: false
     });
     diag('Stream OK','#00ff88');
   } catch(e){
@@ -930,10 +960,15 @@ async function startCamera() {
     }
   }
 
-  // Attach stream so MediaPipe Camera wrapper reads from correct camera
   vid.srcObject=stream;
   await new Promise((res,rej)=>{ vid.oncanplay=res; vid.onerror=rej; vid.play().catch(rej); });
   diag('Video playing','#00ff88');
+
+  // Guard: wait for mpHands to be ready before starting camera loop
+  if(!mpHands){
+    diag('Waiting for MediaPipe to init...','#ffb800');
+    await new Promise(res=>{ const t=setInterval(()=>{ if(mpHands){ clearInterval(t); res(); } },200); });
+  }
 
   const myGen=loopGen;
   mpCamera=new Camera(vid,{
